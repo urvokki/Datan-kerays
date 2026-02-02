@@ -3,6 +3,7 @@ import os
 import json
 import time
 import signal
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -39,12 +40,20 @@ try:
     mongo_client = MongoClient(MONGO_URI)
     # kevyt yhteyden tarkistus
     mongo_client.admin.command("ping")
-    db = mongo_client[MONGO_DB]
-    coll = db[MONGO_COLLECTION]
-    log.info("Yhdistetty MongoDB:hen (%s.%s)", MONGO_DB, MONGO_COLLECTION)
+    log.info("Yhdistetty MongoDB:hen (connection OK)")
 except Exception as e:
     log.exception("MongoDB-yhteys epäonnistui: %s", e)
     raise SystemExit(1)
+
+# --- util ---
+VALID_NAME_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+
+def enqueue_failed(record: dict):
+    try:
+        with FAILED_QUEUE_FILE.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception:
+        log.exception("failed_queue append epäonnistui")
 
 # --- MQTT callbacks ---
 def on_connect(client, userdata, flags, rc):
@@ -54,23 +63,8 @@ def on_connect(client, userdata, flags, rc):
     else:
         log.error("MQTT connect epäonnistui, rc=%s", rc)
 
-def enqueue_failed(record: dict):
-    # Lisää epäonnistunut viesti tiedostoon (later retry)
-    try:
-        with FAILED_QUEUE_FILE.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    except Exception:
-        log.exception("failed_queue append epäonnistui")
-
-def insert_record(record: dict):
-    try:
-        coll.insert_one(record)
-        log.info("Tallennettu dokumentti: %s", record.get("topic", "<no-topic>"))
-    except errors.PyMongoError:
-        log.exception("Mongo insert epäonnistui, puskuroidaan tiedostoon")
-        enqueue_failed(record)
-
 def on_message(client, userdata, msg):
+    # DEBUG: näytä että viesti tuli (ja topic)
     print("MQTT-viesti vastaanotettu:", msg.topic, msg.payload)
 
     payload_raw = msg.payload.decode("utf-8", errors="replace")
@@ -79,13 +73,43 @@ def on_message(client, userdata, msg):
     except Exception:
         payload = {"raw_payload": payload_raw}
 
-    record = {
-        "topic": msg.topic,
-        "payload": payload,
-        "_received_at": datetime.utcnow().isoformat() + "Z"
-    }
-    insert_record(record)
+    # Normalisoi kentänimi "person count" -> "person_count"
+    if isinstance(payload, dict):
+        if "person count" in payload and "person_count" not in payload:
+            try:
+                payload["person_count"] = int(payload.pop("person count"))
+            except Exception:
+                payload["person_count"] = payload.pop("person count")
+        # alias id -> sensor_id
+        if "id" in payload and "sensor_id" not in payload:
+            payload["sensor_id"] = payload.get("id")
 
+    # db/collection valinta viestistä tai ympäristöasetuksesta
+    db_name = payload.get("db_name") if isinstance(payload, dict) else None
+    coll_name = payload.get("coll_name") if isinstance(payload, dict) else None
+
+    if not db_name or not isinstance(db_name, str) or not VALID_NAME_RE.match(db_name):
+        db_name = MONGO_DB
+    if not coll_name or not isinstance(coll_name, str) or not VALID_NAME_RE.match(coll_name):
+        coll_name = MONGO_COLLECTION
+
+    # Lisää DateTime jos puuttuu (ihmisluettava)
+    if isinstance(payload, dict) and "DateTime" not in payload:
+        payload["DateTime"] = datetime.utcnow().strftime("%d %b %Y %H:%M:%S")
+
+    document = payload.copy() if isinstance(payload, dict) else {"raw_payload": payload}
+    document["_received_at"] = datetime.utcnow().isoformat() + "Z"
+    document["topic"] = msg.topic
+
+    # Yksi talletuskutsu — ei tuplaa
+    try:
+        db = mongo_client[db_name]
+        coll = db[coll_name]
+        coll.insert_one(document)
+        log.info("Tallennettu dokumentti: %s.%s (topic=%s)", db_name, coll_name, msg.topic)
+    except Exception as e:
+        log.exception("Mongo insert epäonnistui: %s", e)
+        enqueue_failed({"db": db_name, "coll": coll_name, "document": document})
 
 # --- MQTT client setup ---
 mqtt_client = mqtt.Client()
@@ -95,7 +119,6 @@ if MQTT_USER:
 mqtt_client.on_connect = on_connect
 mqtt_client.on_message = on_message
 
-# try connecting
 def start_mqtt():
     try:
         mqtt_client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
@@ -125,7 +148,6 @@ signal.signal(signal.SIGTERM, stop_all)
 
 if __name__ == "__main__":
     start_mqtt()
-    # pääsilmukka: pidetään prosessi elossa
     try:
         while True:
             time.sleep(1)
