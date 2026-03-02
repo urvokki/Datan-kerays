@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+env/
+venv/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Env / secrets
+.env
+
+# Data / outputs (jos et halua lisätä)
+*.csv
+*.sqlite
+failed_queue.jsonl
+
+# Models (use Git LFS if you want to track them)
+models/
