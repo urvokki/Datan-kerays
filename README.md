@@ -66,7 +66,7 @@ MQTT_USER=automaatio
 MQTT_PASS=CHANGEME
 MQTT_TOPIC=aiotgarage/+/+/presence
 
-MONGO_URI=mongodb+srv://USER:PASS@cluster.mongodb.net/?retryWrites=true&w=majority
+MONGO_URI=mongodb+srv://.....
 MONGO_DB=data_ml
 MONGO_COLLECTION=p_count
 ~~~
