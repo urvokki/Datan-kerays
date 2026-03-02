@@ -1,124 +1,70 @@
-# Datan keräys: RoboLab ja AIoT labran sensoridata
+Yhteenveto
 
-## Kuvaus
+Tämä repo sisältää yksinkertaisen, toistettavan pipeline:n anturidatan keruuseen (MQTT → MongoDB), pienen EDA-vaiheen (resample, visualisoinnit) ja kevyen ennuste/piikkitunnistus-skriptin. Lopputulokset (kuvat ja mittarit) on tallennettu plots/ ja results/ kansioihin.
 
-Projektin tarkoitus: kerätä luokkahuoneiden läsnäolodata MQTT-brokereista, tallentaa se MongoDB Atlas -pilveen, tehdä yksinkertainen EDA (aikasarjan resamplaus) ja rakentaa kevyt ennuste-/piikkitunnistusratkaisu. Tämä repo sisältää keruuputken, analyysiskriptit ja yksinkertaisen ennustajan.
+Sisältö (olennaiset tiedostot)
 
-Tavoite: harjoitusluonteinen, toimiva ja helposti toistettava kokonaisuus — riittää yksinkertainen baseline + kevyt piikkimalli.
+mqtt_to_mongo.py — MQTT → MongoDB consumer (reaaliaikainen)
 
----
+scripts/boxplot_hours_8_21.py — boxplot (08–21, Helsinki)
 
-## Repository-rakenne (olennaiset tiedostot)
+scripts/plot_zoom_2026_02_02_03.py — zoom 2.–3.2.2026
 
-* `mqtt_to_mongo.py` — MQTT-consumer: ottaa viestit MQTT:ltä ja tallentaa MongoDB:hen
-* `.env` — konfiguraatiot (EI versionhallintaan: MONGO_URI, MQTT credentials)
-* `eda_resample_fix.py` — EDA ja resample (1T, 5T, 15T); tuottaa `resampled_5min_fix.csv` jne.
-* `resampled_5min_fix.csv` (tuotos)
-* `scripts/train_model_5min.py` — koulutusskripti (LightGBM)
-* `models/lgbm_5min.pkl` — (valinnainen) tallennettu malli
-* `results/metrics.json` — koulutuksen tulokset
-* `scripts/eval_holdout_baseline.py` — holdout-eval baseline vs model
-* `scripts/eval_nonzero_and_spikes.py` — ei-nollat / piikkitarkistus
-* `scripts/predict_simple.py` — valmis ennustaja: baseline + model spike flag
-* `scripts/*.py` — muut apu- ja plot-skriptit (plot_zoom_..., boxplot_hours_8_21.py)
-* `plots/` — suosittelemme lisätä tähän generoidut PNG-kuvat
-* `failed_queue.jsonl` — puskuritiedosto epäonnistuneille tallennuksille (consumer)
+scripts/predict_simple.py — yksinkertainen ennustaja (baseline + model)
 
----
+resampled_5min_fix.csv (valinnainen, näyte)
 
-## Vaadittavat ympäristö- ja asennusvaiheet
+plots/ — generoituja kuvia (esim. boxplot_hours_8_21.png)
 
-1. Luo virtuaaliympäristö (Windows PowerShell -esimerkki):
+results/metrics.json (valinnainen)
 
-```powershell
+requirements.txt
+
+.env.example (esimerkkiympäristömuuttujat; EI salasanoja)
+
+Lyhyet suoritusohjeet (minimi)
+
+Luo ja aktivoi virtuaaliympäristö:
+
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
 
-2. Asenna riippuvuudet (projekti käyttää mm. `paho-mqtt`, `pymongo`, `python-dateutil`, `pandas`, `matplotlib`, `lightgbm`):
+Asenna riippuvuudet:
 
-```powershell
 pip install -r requirements.txt
-# Jos requirements.txt puuttuu, voit asentaa minimipaketit:
-# pip install paho-mqtt pymongo python-dateutil pandas matplotlib certifi scikit-learn lightgbm joblib
-```
 
-3. Lisää `.env` tiedosto juureen (osa sisällöstä salattua):
+Kopioi .env.example → .env ja täytä omilla arvoillasi (ÄLÄ commitoi .env).
 
-```
-# Esimerkki (korvaa omilla arvoilla)
-MQTT_HOST=automaatio.cloud.shiftr.io
-MQTT_PORT=1883
-MQTT_USER=automaatio
-MQTT_PASS=CHANGEME
-MQTT_TOPIC=aiotgarage/+/+/presence
+(Live) Käynnistä consumer:
 
-MONGO_URI=mongodb+srv://USER:PASS@cluster0.example.mongodb.net/?retryWrites=true&w=majority
-MONGO_DB=data_ml
-MONGO_COLLECTION=p_count
-```
-
-> HUOM: lisää `.env` ja muita salaisuuksia `.gitignore`-tiedostoon ennen pushia.
-
----
-
-## Käyttöohjeet — päävaiheet
-
-### 1) Käynnistä consumer (MQTT → MongoDB)
-
-```powershell
-.\.venv\Scripts\Activate.ps1
 python mqtt_to_mongo.py
-```
 
-Tarkista loki, että `Yhdistetty MongoDB:hen (connection OK)` ja `MQTT loop started` näkyvät.
+Generoi kuvat (offlinella: skriptit lukevat resampled_5min_fix.csv):
 
-### 2) Testaa publish (testi-viesti)
+python scripts/boxplot_hours_8_21.py
+python scripts/plot_zoom_2026_02_02_03.py
 
-```powershell
-python publish_test.py
-```
+(Valinnainen) Ennuste:
 
-Tarkista, että testiviesti näkyy MongoDB:ssä. Käytä `check_db.py` tai MongoDB Atlas UI:ta.
+python scripts/predict_simple.py
+Mitä arvioijan kannattaa katsoa
 
-### 3) EDA ja resample
+mqtt_to_mongo.py — dokumentoitu consumer ja .env.example (keruun toteutus)
 
-```powershell
-python eda_resample_fix.py
-```
+plots/ — tuottamasi visualisoinnit (aikasarja, boxplot)
 
-Skripti tuottaa CSV- ja PNG-tiedostoja (`resampled_5min_fix.csv`, `resampled_minute_fix.csv`, `resampled_15min_fix.csv` ja vastaavat kuvat). Tarkista kansio `plots/` tai repo-juuri.
+results/metrics.json — mallin mittarit (jos mukana)
 
-### 4) Koulutus
+README ja helppo testi: aja kaksi komentoa kohdasta 5.
 
-```powershell
-python scripts\train_model_5min.py
-```
+Huomioitavaa
 
-Tämä luo `models/lgbm_5min.pkl` ja `results/metrics.json`.
+Älä commitoi .env-tiedostoa tai virtuaaliympäristöä (.venv/).
 
-### 5) Evaluointi
+Mallit (models/) ja suuret CSV:t voi jättää pois; lisää tarvittaessa latausohjeet README.md-kohtaan.
 
-```powershell
-python scripts\eval_holdout_baseline.py
-python scripts\eval_nonzero_and_spikes.py
-```
+Lyhyt tulossanasto (repoon liitettynä)
 
-Näillä saat MAE:t ja piikkitarkkuudet. Dokumentoi tulokset `results/`-kansioon.
+Resampled 5-min data ja plotit löytyvät resampled_5min_fix.csv ja plots/.
 
-### 6) Ennuste / demo
-
-```powershell
-python scripts\predict_simple.py
-```
-
-Tulostaa JSON-tyylisen ennusteen: baseline, model_pred, is_spike ja käytetyn timestampin.
-
----
-
-## Plots ja visualisointi
-
-* `scripts/plot_timeseries_mongo.py` tai `scripts/plot_timeseries_csv.py` luo yleiskuvan.
-* `scripts/plot_zoom_2026_02_02_03.py` tekee zoomin 2.–3.2.2026 (valmis skripti).
-* `scripts/boxplot_hours_8_21.py` tuottaa boxplotin tunneittain (08–21 Helsinki-aika).
-
+Perustulokset ja arviointi tallennettu results/metrics.json (esim. MAE, piikkitunnistus-mittarit).
