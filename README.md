@@ -57,7 +57,7 @@ pip install paho-mqtt pymongo python-dateutil pandas matplotlib certifi scikit-l
 
 ## .env tiedosto
 
-Luo projektin juureen `.env` (älä lisää GitHubiin):
+Luo projektin juureen `.env` (ei salaisia osia tänne):
 
 ~~~
 MQTT_HOST=automaatio.cloud.shiftr.io
