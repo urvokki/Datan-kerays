@@ -43,7 +43,7 @@ pip install -r requirements.txt
 # pip install paho-mqtt pymongo python-dateutil pandas matplotlib certifi scikit-learn lightgbm joblib
 ```
 
-3. Lisää `.env` tiedosto juureen (ÄLÄ lataa sisältöä julkiseen repoosi):
+3. Lisää `.env` tiedosto juureen (osa sisällöstä salattua):
 
 ```
 # Esimerkki (korvaa omilla arvoilla)
