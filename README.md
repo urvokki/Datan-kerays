@@ -106,6 +106,12 @@ python scripts/eval_nonzero_and_spikes.py
 python scripts/predict_simple.py
 ~~~
 
+### 6. Aikasarjaennuste
+
+~~~powershell
+python scripts/forecast_prophet.py
+~~~
+
 ---
 
 ## Tulokset
